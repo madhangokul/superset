@@ -57,11 +57,7 @@ RUN mkdir -p /app/superset/static/assets \
 # ideally we'd COPY only their package.json. Here npm ci will be cached as long
 # as the full content of these folders don't change, yielding a decent cache reuse rate.
 # Note that's it's not possible selectively COPY of mount using blobs.
-RUN --mount=type=bind,source=./superset-frontend/package.json,target=./package.json \
-    --mount=type=bind,source=./superset-frontend/package-lock.json,target=./package-lock.json \
-    --mount=type=cache,target=/root/.cache \
-    --mount=type=cache,target=/root/.npm \
-    if [ "$DEV_MODE" = "false" ]; then \
+RUN if [ "$DEV_MODE" = "false" ]; then \
         npm ci; \
     else \
         echo "Skipping 'npm ci' in dev mode"; \
@@ -76,8 +72,7 @@ COPY superset-frontend /app/superset-frontend
 FROM superset-node-ci AS superset-node
 
 # Build the frontend if not in dev mode
-RUN --mount=type=cache,target=/root/.npm \
-    if [ "$DEV_MODE" = "false" ]; then \
+RUN if [ "$DEV_MODE" = "false" ]; then \
         echo "Running 'npm run ${BUILD_CMD}'"; \
         npm run ${BUILD_CMD}; \
     else \
@@ -124,8 +119,7 @@ FROM python-base AS python-translation-compiler
 
 # Install Python dependencies using docker/pip-install.sh
 COPY requirements/translations.txt requirements/
-RUN --mount=type=cache,target=/root/.cache/uv \
-    /app/docker/pip-install.sh --requires-build-essential -r requirements/translations.txt
+RUN /app/docker/pip-install.sh --requires-build-essential -r requirements/translations.txt
 
 COPY superset/translations/ /app/translations_mo/
 RUN if [ "$BUILD_TRANSLATIONS" = "true" ]; then \
@@ -163,8 +157,7 @@ RUN mkdir -p \
 # Install Playwright and optionally setup headless browsers
 ARG INCLUDE_CHROMIUM="true"
 ARG INCLUDE_FIREFOX="false"
-RUN --mount=type=cache,target=${SUPERSET_HOME}/.cache/uv \
-    if [ "$INCLUDE_CHROMIUM" = "true" ] || [ "$INCLUDE_FIREFOX" = "true" ]; then \
+RUN if [ "$INCLUDE_CHROMIUM" = "true" ] || [ "$INCLUDE_FIREFOX" = "true" ]; then \
         uv pip install playwright && \
         playwright install-deps && \
         if [ "$INCLUDE_CHROMIUM" = "true" ]; then playwright install chromium; fi && \
@@ -213,11 +206,9 @@ FROM python-common AS lean
 
 # Install Python dependencies using docker/pip-install.sh
 COPY requirements/base.txt requirements/
-RUN --mount=type=cache,target=${SUPERSET_HOME}/.cache/uv \
-    /app/docker/pip-install.sh --requires-build-essential -r requirements/base.txt
+RUN /app/docker/pip-install.sh --requires-build-essential -r requirements/base.txt
 # Install the superset package
-RUN --mount=type=cache,target=${SUPERSET_HOME}/.cache/uv \
-    uv pip install .
+RUN uv pip install .
 RUN python -m compileall /app/superset
 
 USER superset
@@ -236,11 +227,9 @@ RUN /app/docker/apt-install.sh \
 # Copy development requirements and install them
 COPY requirements/*.txt requirements/
 # Install Python dependencies using docker/pip-install.sh
-RUN --mount=type=cache,target=${SUPERSET_HOME}/.cache/uv \
-    /app/docker/pip-install.sh --requires-build-essential -r requirements/development.txt
+RUN /app/docker/pip-install.sh --requires-build-essential -r requirements/development.txt
 # Install the superset package
-RUN --mount=type=cache,target=${SUPERSET_HOME}/.cache/uv \
-    uv pip install .
+RUN uv pip install .
 
 RUN uv pip install .[postgres]
 RUN python -m compileall /app/superset
