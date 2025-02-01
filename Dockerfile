@@ -18,7 +18,7 @@
 ######################################################################
 # Node stage to deal with static asset construction
 ######################################################################
-ARG PY_VER=3.11-slim-bookworm
+ARG PY_VER=3.11-slim
 
 # If BUILDPLATFORM is null, set it to 'amd64' (or leave as is otherwise).
 ARG BUILDPLATFORM=${BUILDPLATFORM:-amd64}
@@ -26,7 +26,7 @@ ARG BUILDPLATFORM=${BUILDPLATFORM:-amd64}
 ######################################################################
 # superset-node-ci used as a base for building frontend assets and CI
 ######################################################################
-FROM --platform=${BUILDPLATFORM} node:20-bullseye-slim AS superset-node-ci
+FROM --platform=${BUILDPLATFORM} node:20-slim AS superset-node-ci
 ARG BUILD_TRANSLATIONS="false" # Include translations in the final build
 ENV BUILD_TRANSLATIONS=${BUILD_TRANSLATIONS}
 ARG DEV_MODE="false"           # Skip frontend build in dev mode
@@ -58,7 +58,7 @@ RUN mkdir -p /app/superset/static/assets \
 # as the full content of these folders don't change, yielding a decent cache reuse rate.
 # Note that's it's not possible selectively COPY of mount using blobs.
 RUN if [ "$DEV_MODE" = "false" ]; then \
-        npm ci; \
+        npm ci --prefer-offline --no-audit --no-fund; \
     else \
         echo "Skipping 'npm ci' in dev mode"; \
     fi
@@ -119,14 +119,12 @@ FROM python-base AS python-translation-compiler
 
 # Install Python dependencies using docker/pip-install.sh
 COPY requirements/translations.txt requirements/
-RUN /app/docker/pip-install.sh --requires-build-essential -r requirements/translations.txt
+RUN PIP_NO_CACHE_DIR=1 pip install --no-cache-dir --prefer-binary -r requirements/translations.txt
 
 COPY superset/translations/ /app/translations_mo/
 RUN if [ "$BUILD_TRANSLATIONS" = "true" ]; then \
-        pybabel compile -d /app/translations_mo | true; \
-    fi; \
-    rm -f /app/translations_mo/*/*/*.po; \
-    rm -f /app/translations_mo/*/*/*.json;
+        pybabel compile -d /app/translations_mo || true; \
+    fi
 
 ######################################################################
 # Python APP common layer
@@ -157,14 +155,15 @@ RUN mkdir -p \
 # Install Playwright and optionally setup headless browsers
 ARG INCLUDE_CHROMIUM="true"
 ARG INCLUDE_FIREFOX="false"
+ARG INCLUDE_CHROMIUM="false"
+ARG INCLUDE_FIREFOX="false"
 RUN if [ "$INCLUDE_CHROMIUM" = "true" ] || [ "$INCLUDE_FIREFOX" = "true" ]; then \
-        uv pip install playwright && \
-        playwright install-deps && \
-        if [ "$INCLUDE_CHROMIUM" = "true" ]; then playwright install chromium; fi && \
-        if [ "$INCLUDE_FIREFOX" = "true" ]; then playwright install firefox; fi; \
+        uv pip install --no-cache-dir playwright && \
+        playwright install-deps; \
     else \
         echo "Skipping browser installation"; \
     fi
+
 
 # Copy required files for Python build
 COPY pyproject.toml setup.py MANIFEST.in README.md ./
